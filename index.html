@@ -1,0 +1,1043 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PollMii — everything is a poll</title>
+<meta name="description" content="PollMii is the social network where every post is a poll. Ask anything, vote on everything.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 44 34'%3E%3Cg stroke='%232b2440' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg transform='rotate(12 31 17)'%3E%3Cpath d='M22 6h18v10a9 9 0 0 1-18 0z' fill='%23b3a1ff'/%3E%3Cpath d='M26 13.5l3.5-1.5M36 13.5l-3.5-1.5' fill='none'/%3E%3Cpath d='M27 22.5a4 4 0 0 1 8 0z' fill='%232b2440'/%3E%3C/g%3E%3Cg transform='rotate(-10 14 17)'%3E%3Cpath d='M4 5h18v10a9 9 0 0 1-18 0z' fill='%23ff9cc6'/%3E%3Cpath d='M7.5 11.5q2-2.2 4 0M14.5 11.5q2-2.2 4 0' fill='none'/%3E%3Cpath d='M8.5 15.5h9a4.5 4.5 0 0 1-9 0z' fill='%232b2440'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #fbf8ff;
+  --surface: #ffffff;
+  --ink: #2b2440;
+  --muted: #7b7492;
+  --line: #e9e0f6;
+  --accent: #7c5cf0;
+  --accent-deep: #5b3fd1;
+  --accent-ink: #ffffff;
+  --pink: #ffc9de;
+  --mint: #bdeed9;
+  --butter: #ffe7a3;
+  --sky: #c6dcff;
+  --pop: #ff5fa2;
+  --live: #2fcf8f;
+  --hot: #f2643d;
+  --heart: #ff4f8b;
+  --shadow: 0 1px 2px rgba(124, 92, 240, .06), 0 14px 30px -20px rgba(124, 92, 240, .45);
+  --round: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", "Nunito", system-ui, sans-serif;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow-anchor: none; /* scroll position is kept stable by hand when polls arrive */
+}
+body::before { /* soft pastel wash that stays put while the feed scrolls */
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(55vmax 45vmax at 0% 0%, #ffdcec 0%, transparent 65%),
+    radial-gradient(50vmax 45vmax at 100% 6%, #d6ecff 0%, transparent 65%),
+    radial-gradient(60vmax 50vmax at 65% 100%, #d8fae6 0%, transparent 65%),
+    radial-gradient(42vmax 42vmax at 0% 85%, #fff1c2 0%, transparent 65%);
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+/* ---------- top bar ---------- */
+.top {
+  position: sticky; top: 0; z-index: 20;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.top-in {
+  max-width: 984px; margin: 0 auto; padding: 10px 16px;
+  display: flex; align-items: center; gap: 12px;
+}
+.brand {
+  display: flex; align-items: center; gap: 8px;
+  font: 800 22px/1 var(--round); letter-spacing: -.02em;
+  color: var(--ink); text-decoration: none;
+}
+.brand svg { flex: none; width: 44px; height: 34px; }
+.brand em { font-style: normal; color: var(--pop); }
+.live {
+  margin-left: auto; display: flex; align-items: center; gap: 7px;
+  font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.live b { color: var(--ink); font-weight: 650; }
+.dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--live);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--live) 60%, transparent);
+  animation: pulse 1.8s infinite;
+}
+@keyframes pulse {
+  70% { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.btn {
+  border: 0; border-radius: 999px; padding: 9px 18px;
+  background: var(--accent); color: var(--accent-ink);
+  font: 700 15px/1 var(--round);
+  box-shadow: 0 3px 0 var(--accent-deep);
+  transition: filter .15s, transform .1s, box-shadow .1s, opacity .15s;
+}
+.btn:hover:not(:disabled) { filter: brightness(1.08); }
+.btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--accent-deep); }
+.btn:disabled { opacity: .35; cursor: default; box-shadow: none; }
+
+/* ---------- layout ---------- */
+.shell {
+  max-width: 984px; margin: 0 auto; padding: 16px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px;
+}
+aside { display: none; }
+@media (min-width: 940px) {
+  .shell { grid-template-columns: minmax(0, 600px) 320px; justify-content: center; }
+  aside { display: block; }
+}
+main { max-width: 600px; width: 100%; margin: 0 auto; }
+.card {
+  background: var(--surface); border: 1.5px solid var(--line);
+  border-radius: 22px; box-shadow: var(--shadow);
+}
+
+/* ---------- composer ---------- */
+.composer { padding: 16px; }
+.as { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
+.as input {
+  border: 0; background: transparent; font-weight: 700; color: var(--ink);
+  padding: 3px 6px; margin-left: -2px; border-radius: 6px; width: 16ch; max-width: 50vw;
+}
+.as input:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.composer textarea {
+  display: block; width: 100%; margin: 10px 0 10px; padding: 4px 0;
+  border: 0; background: transparent; resize: none; overflow: hidden;
+  font: 650 21px/1.3 var(--round); letter-spacing: -.01em;
+}
+.composer textarea:focus, .as input:focus { outline: none; }
+.as input:focus { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.composer ::placeholder { color: var(--muted); opacity: .75; }
+.orows { display: grid; gap: 8px; }
+.orow { display: flex; gap: 8px; }
+.orow input {
+  flex: 1; min-width: 0; height: 44px; padding: 0 14px;
+  border: 1.5px solid var(--line); border-radius: 12px; background: transparent;
+}
+.orow input:focus { outline: none; border-color: var(--accent); }
+.orow button {
+  width: 44px; border: 0; border-radius: 12px; background: transparent;
+  color: var(--muted); font-size: 20px; line-height: 1;
+}
+.orow button:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
+.cfoot { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.ghost {
+  border: 0; background: transparent; padding: 8px 10px; margin-left: -10px;
+  border-radius: 999px; color: var(--accent); font-weight: 650; font-size: 14px;
+}
+.ghost:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.cfoot .note { font-size: 13px; color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+.cfoot .note.warn { color: var(--hot); }
+
+/* ---------- tabs ---------- */
+.tabs { display: flex; gap: 4px; margin: 18px 0 12px; border-bottom: 1px solid var(--line); }
+.tab {
+  border: 0; background: transparent; padding: 10px 14px; margin-bottom: -1px;
+  font: 700 15px/1 var(--round); color: var(--muted);
+  border-bottom: 3px solid transparent;
+}
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+
+/* ---------- feed ---------- */
+.slot { padding-bottom: 12px; }
+.feed.only-mine .slot:not(.mine) { display: none; }
+.poll { padding: 16px; transition: box-shadow .4s, border-color .4s; }
+.poll.flash { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+.phead { display: flex; align-items: center; gap: 10px; }
+.avatar {
+  flex: none; width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: hsl(var(--h, 262) 88% 87%); color: hsl(var(--h, 262) 48% 30%);
+  font: 700 15px/1 var(--round); letter-spacing: .02em;
+}
+.avatar.sm { width: 30px; height: 30px; font-size: 12px; }
+.who { min-width: 0; flex: 1; line-height: 1.25; }
+.name { display: block; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meta { display: block; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.badge {
+  flex: none; font: 700 11px/1 var(--round); letter-spacing: .06em; text-transform: uppercase;
+  padding: 5px 8px; border-radius: 999px;
+  color: var(--hot); background: color-mix(in srgb, var(--hot) 13%, transparent);
+}
+.badge.you { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.q { margin: 12px 0 12px; font: 700 20px/1.3 var(--round); letter-spacing: -.01em; overflow-wrap: anywhere; }
+.opts { display: grid; gap: 8px; }
+.opt {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; min-height: 44px; padding: 9px 14px;
+  border: 1.5px solid var(--line); border-radius: 12px; background: transparent;
+  font-weight: 600; text-align: left;
+  transition: border-color .15s, background .15s;
+}
+.opt:hover:not(:disabled) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.opt:disabled { cursor: default; color: inherit; }
+.opt .bar {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 0;
+  background: var(--c, var(--pink)); opacity: .55;
+  transition: width .7s cubic-bezier(.2, .8, .2, 1), opacity .3s;
+}
+/* each answer gets its own pastel */
+.opt:nth-child(1) { --c: var(--pink); }
+.opt:nth-child(2) { --c: var(--mint); }
+.opt:nth-child(3) { --c: var(--butter); }
+.opt:nth-child(4) { --c: var(--sky); }
+.opt .txt, .opt .pct { position: relative; }
+.opt .txt { overflow-wrap: anywhere; }
+.opt .pct { flex: none; font-weight: 750; font-variant-numeric: tabular-nums; opacity: 0; transition: opacity .3s .1s; }
+.revealed .opt .bar { width: var(--p, 0%); }
+.revealed .opt .pct { opacity: 1; }
+.revealed .opt.lead .bar { opacity: 1; }
+.opt.chosen { border-color: var(--accent); }
+.opt.chosen .txt::after { content: "✓"; margin-left: 8px; color: var(--accent); font-weight: 800; }
+.pfoot {
+  display: flex; align-items: center; gap: 6px; margin-top: 12px;
+  font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.votes { animation: bumpA .7s; }
+.votes.b { animation-name: bumpB; }
+@keyframes bumpA { from { color: var(--accent); } }
+@keyframes bumpB { from { color: var(--accent); } }
+.pfoot .sp { flex: 1; }
+.link { border: 0; background: transparent; padding: 6px 8px; border-radius: 8px; color: var(--muted); font-size: 13px; }
+.link:hover { color: var(--hot); background: color-mix(in srgb, var(--hot) 10%, transparent); }
+.like {
+  display: flex; align-items: center; gap: 5px; min-width: 36px; height: 32px;
+  border: 0; background: transparent; padding: 0 8px; margin-right: -8px;
+  border-radius: 999px; color: var(--muted); font-size: 13px;
+}
+.like:hover { color: var(--heart); background: color-mix(in srgb, var(--heart) 11%, transparent); }
+.like svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; transition: transform .2s; }
+.like.on { color: var(--heart); }
+.like.on svg { fill: currentColor; transform: scale(1.12); }
+.empty { text-align: center; color: var(--muted); padding: 40px 16px; }
+
+/* ---------- sidebar ---------- */
+aside .inner { position: sticky; top: 72px; display: grid; gap: 16px; }
+.side { padding: 16px; }
+.side h2 { margin: 0 0 8px; font: 800 17px/1.2 var(--round); }
+.hot { list-style: none; margin: 0 -8px; padding: 0; counter-reset: hot; }
+.hot button {
+  display: grid; grid-template-columns: 22px 1fr; gap: 0 6px; width: 100%;
+  border: 0; background: transparent; text-align: left; padding: 8px; border-radius: 10px;
+}
+.hot button:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.hot button::before { counter-increment: hot; content: counter(hot); grid-row: span 2; color: var(--muted); font: 800 15px/1.4 var(--round); }
+.hot .hq { font-weight: 650; font-size: 14.5px; line-height: 1.3; }
+.hot .hv { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; }
+.stats div { display: flex; flex-direction: column-reverse; }
+.stats dt { font-size: 12px; color: var(--muted); }
+.stats dd { margin: 0; font: 800 22px/1.2 var(--round); font-variant-numeric: tabular-nums; }
+
+/* ---------- floating bits ---------- */
+.pill {
+  position: fixed; top: 68px; left: 50%; transform: translateX(-50%); z-index: 15;
+  border: 0; border-radius: 999px; padding: 9px 16px;
+  background: var(--accent); color: var(--accent-ink);
+  font: 700 14px/1 var(--round);
+  box-shadow: 0 6px 20px -6px rgba(0, 0, 0, .35);
+  animation: drop .25s ease-out;
+}
+@keyframes drop { from { opacity: 0; transform: translate(-50%, -10px); } }
+.toasts {
+  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 30;
+  display: grid; gap: 8px; justify-items: center; width: max-content; max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+.toast {
+  background: var(--ink); color: var(--bg);
+  padding: 10px 16px; border-radius: 999px; font-size: 14px; font-weight: 600;
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, .4);
+  animation: rise .3s ease-out; transition: opacity .3s;
+}
+.toast.out { opacity: 0; }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+
+@media (max-width: 420px) {
+  .live span { display: none; }
+  .q { font-size: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="#" id="brand" aria-label="PollMii home">
+      <svg viewBox="0 0 44 34" aria-hidden="true">
+        <g stroke="#2b2440" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <g transform="rotate(12 31 17)">
+            <path d="M22 6h18v10a9 9 0 0 1-18 0z" fill="#b3a1ff"/>
+            <path d="M26 13.5l3.5-1.5M36 13.5l-3.5-1.5" fill="none"/>
+            <path d="M27 22.5a4 4 0 0 1 8 0z" fill="#2b2440"/>
+          </g>
+          <g transform="rotate(-10 14 17)">
+            <path d="M4 5h18v10a9 9 0 0 1-18 0z" fill="#ff9cc6"/>
+            <path d="M7.5 11.5q2-2.2 4 0M14.5 11.5q2-2.2 4 0" fill="none"/>
+            <path d="M8.5 15.5h9a4.5 4.5 0 0 1-9 0z" fill="#2b2440"/>
+          </g>
+        </g>
+      </svg>
+      <span>Poll<em>Mii</em></span>
+    </a>
+    <div class="live"><i class="dot"></i><b id="online">2,318</b> <span>voting now</span></div>  </div>
+</header>
+
+<div class="shell">
+  <main>
+    <form class="composer card" id="composer" autocomplete="off">
+      <label class="as">
+        <span class="avatar sm" id="meAvatar"></span>
+        Posting as
+        <input id="meName" maxlength="24" aria-label="Your display name" placeholder="Your name">
+      </label>
+      <textarea id="q" rows="1" maxlength="140" placeholder="Ask everyone something…" aria-label="Poll question"></textarea>
+      <div class="orows" id="orows"></div>
+      <div class="cfoot">
+        <button class="ghost" type="button" id="addOpt">+ Add option</button>
+        <span class="note" id="count">140</span>
+        <button class="btn" type="submit" id="postBtn" disabled>Post poll</button>
+      </div>
+    </form>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tabLive" aria-selected="true" type="button">Live feed</button>
+      <button class="tab" role="tab" id="tabMine" aria-selected="false" type="button">My polls</button>
+    </div>
+
+    <div class="feed" id="feed"></div>
+    <p class="empty" id="emptyMine" hidden>You haven't posted a poll yet. Ask something up top and watch the votes roll in.</p>
+  </main>
+
+  <aside>
+    <div class="inner">
+      <section class="side card">
+        <h2>Hot right now</h2>
+        <ol class="hot" id="hot"></ol>
+      </section>
+      <section class="side card">
+        <h2>Your activity</h2>
+        <dl class="stats">
+          <div><dt>Votes cast</dt><dd id="sVotes">0</dd></div>
+          <div><dt>Polls posted</dt><dd id="sPosted">0</dd></div>
+          <div><dt>Votes received</dt><dd id="sReceived">0</dd></div>
+        </dl>
+      </section>
+    </div>
+  </aside>
+</div>
+
+<button class="pill" id="pill" type="button" hidden>↑ New polls</button>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ================= tuning ================= */
+const SPAWN_MS = [3800, 6400];   // a new poll lands in the feed every ~5s
+const TICK_MS = 350;             // how often simulated votes are applied
+const MAX_FEED = 28;             // generated polls kept on the page (must stay below the number of questions)
+const MAX_OPTIONS = 4;
+const POLL_HOURS = 24;           // lifetime of a visitor-created poll
+const RESULTS_BEFORE_VOTING = false; // true = live bars and percentages show on every poll, voted or not
+
+/* ================= content ================= */
+// q: question, o: options, w: how the crowd tends to lean
+// Ordinary, everyday questions.
+const EVERYDAY = [
+  { q: 'Best time to work out?', o: ['Early morning', 'Lunch break', 'Evening', "I don't"], w: [31, 9, 38, 22] },
+  { q: 'How many unread emails do you have right now?', o: ['Zero', 'Under 100', '100 to 1,000', 'Four digits and climbing'], w: [14, 33, 22, 31] },
+  { q: 'Is it okay to recline your seat on a plane?', o: ['Always', 'Only on long flights', 'Never'], w: [24, 55, 21] },
+  { q: 'Morning person or night owl?', o: ['Morning person', 'Night owl', 'Neither, just tired'], w: [27, 39, 34] },
+  { q: 'Best season?', o: ['Spring', 'Summer', 'Fall', 'Winter'], w: [19, 24, 46, 11] },
+  { q: 'Do you make your bed every day?', o: ['Every day', 'When guests come over', 'Never'], w: [38, 37, 25] },
+  { q: 'You have to give one up forever:', o: ['Coffee', 'Cheese', 'Chocolate', 'Fries'], w: [29, 14, 33, 24] },
+  { q: 'At what battery level do you start to worry?', o: ['50%', '20%', '10%', 'I live at 1%'], w: [12, 44, 27, 17] },
+  { q: 'Fastest way to actually reach you?', o: ['Text', 'Call', 'Voice memo', 'Email'], w: [66, 13, 9, 12] },
+  { q: 'Dogs or cats?', o: ['Dogs', 'Cats', 'Both', 'Neither'], w: [38, 27, 31, 4] },
+  { q: 'Will the 4-day work week become normal?', o: ['Yes, within 10 years', 'Not in my lifetime', 'Already on it'], w: [48, 43, 9] },
+  { q: 'Do you sleep with socks on?', o: ['Yes', 'No', 'One foot out of the blanket'], w: [16, 53, 31] },
+  { q: 'Best movie snack?', o: ['Popcorn', 'Candy', 'Nachos', 'I sneak in a full meal'], w: [58, 16, 11, 15] },
+  { q: 'Window or aisle?', o: ['Window', 'Aisle', 'Middle'], w: [56, 41, 3] },
+  { q: 'How many alarms do you set in the morning?', o: ['One', 'Two or three', 'Five or more', 'None'], w: [29, 37, 21, 13] },
+  { q: 'Dark mode or light mode?', o: ['Dark', 'Light', 'Auto'], w: [59, 17, 24] },
+  { q: 'Is cold pizza a valid breakfast?', o: ['Yes', 'Only reheated', 'No'], w: [57, 29, 14] },
+  { q: 'When is it acceptable to start playing holiday music?', o: ['November 1st', 'After Thanksgiving', 'December only', 'Never'], w: [22, 41, 28, 9] },
+  { q: 'How do you take your coffee?', o: ['Black', 'With milk', 'Sweet and milky', "I don't drink coffee"], w: [26, 31, 24, 19] },
+  { q: 'Shower: morning or night?', o: ['Morning', 'Night', 'Both'], w: [43, 45, 12] },
+  { q: 'One-way ticket to Mars. Do you go?', o: ['Yes', 'Only if I can come back', 'No'], w: [11, 36, 53] },
+  { q: 'Do you read the terms and conditions?', o: ['Every word', 'I skim', 'Never'], w: [4, 22, 74] },
+  { q: 'Best form of potato?', o: ['Fries', 'Mashed', 'Baked', 'Chips'], w: [42, 27, 12, 19] },
+  { q: 'Do you back into parking spots?', o: ['Always', 'Never', 'Only when it is easy'], w: [24, 41, 35] },
+  { q: 'How many browser tabs do you have open?', o: ['Under 10', '10 to 30', '30 to 100', "I've lost count"], w: [31, 34, 14, 21] },
+  { q: 'Breakfast for dinner?', o: ['Love it', "It's fine", 'Keep them separate'], w: [66, 25, 9] },
+  { q: 'Do you eat the pizza crust?', o: ['Always', 'Only if it is good', 'Never'], w: [49, 43, 8] },
+  { q: 'Would you want to know the date you die?', o: ['Yes', 'No', 'Only the year'], w: [21, 61, 18] },
+  { q: 'How early do you get to the airport?', o: ['Three hours', 'Two hours', 'One hour', 'As the doors close'], w: [14, 52, 27, 7] },
+  { q: 'Do you listen to music while you work?', o: ['Always', 'Only without lyrics', 'I need silence'], w: [44, 33, 23] },
+  { q: 'Favorite kind of weather?', o: ['Sunny and warm', 'Rain', 'Snow', 'Grey and cool'], w: [41, 26, 12, 21] },
+  { q: 'Do you take notes on paper or on a screen?', o: ['Paper', 'Screen', "I don't take notes"], w: [37, 46, 17] },
+];
+
+// Stranger questions, asked with a straight face.
+const ODD = [
+  { q: 'Are shapes orbs?', o: ['Yes', 'Only the round ones', 'Orbs are shapes', 'Please do not ask me this'], w: [22, 31, 28, 19] },
+  { q: 'Did you actually meet Mother Goose when you were a kid?', o: ['Yes, briefly', 'No', 'She came to my school', "I'm not allowed to say"], w: [18, 41, 27, 14] },
+  { q: "Which direction is the moon's favorite?", o: ['Left', 'Up', 'Away', 'Toward me specifically'], w: [14, 23, 36, 27] },
+  { q: 'How many doors have you been through in your life?', o: ['Under 1,000', 'Millions', 'All of them, twice', 'The same door, many times'], w: [9, 38, 21, 32] },
+  { q: 'Is soup aware?', o: ['Yes', 'No', 'Only while hot'], w: [26, 33, 41] },
+  { q: 'Who taught the birds?', o: ['Older birds', 'A man named Dennis', 'Nobody. They just know.', 'I did'], w: [34, 22, 37, 7] },
+  { q: 'Do you remember the first time you saw a triangle?', o: ['Vividly', 'No', 'I have never seen one'], w: [47, 39, 14] },
+  { q: 'Is the ocean finished?', o: ['Yes', 'Still being worked on', 'It was finished in 1987'], w: [19, 52, 29] },
+  { q: 'What is behind the sky?', o: ['More sky', 'A second, quieter sky', 'A door', 'I was told not to look'], w: [21, 43, 15, 21] },
+  { q: 'Have you ever been mistaken for a lamp?', o: ['Yes', 'No', 'I am a lamp'], w: [31, 48, 21] },
+  { q: 'How long can you look at a horse?', o: ['A few seconds', 'About an hour', 'Indefinitely', 'The horse looks away first'], w: [12, 24, 29, 35] },
+  { q: 'Would you trust a pond?', o: ['Yes', 'No', 'Depends on the pond', 'I have been burned before'], w: [17, 22, 44, 17] },
+  { q: 'Is Tuesday heavier than Thursday?', o: ['Much heavier', 'Lighter', 'They weigh the same', 'Tuesday is hollow'], w: [41, 13, 17, 29] },
+  { q: 'Did the wizard ever come back to your town?', o: ['Yes, in the spring', 'No', 'He never left', "We don't talk about the wizard"], w: [16, 27, 31, 26] },
+  { q: 'Which number is the wettest?', o: ['6', '8', '40', 'Numbers are dry'], w: [24, 39, 21, 16] },
+  { q: 'Can a bell be shy?', o: ['Yes', 'No', 'I knew one that was'], w: [38, 21, 41] },
+  { q: 'Where does your shadow go on its days off?', o: ['The coast', "It doesn't get days off", "A neighbor's house", "I've never asked"], w: [19, 28, 17, 36] },
+  { q: 'Has a cloud ever looked at you first?', o: ['Yes', 'No', 'We made eye contact once'], w: [29, 33, 38] },
+  { q: 'Is your name spelled correctly?', o: ['Yes', 'No', 'It used to be'], w: [51, 12, 37] },
+  { q: 'Do you know where the big spoon is?', o: ['Yes', 'No', "It's not for me to say", 'There is no big spoon'], w: [14, 33, 37, 16] },
+  { q: 'Were you invited to the feast?', o: ['Yes', 'No', 'I hosted', 'I am the feast'], w: [28, 36, 13, 23] },
+  { q: 'What did the old man by the river tell you?', o: ['Nothing useful', 'My future', 'A recipe', 'There was no old man'], w: [27, 18, 34, 21] },
+  { q: 'Is green still happening?', o: ['Yes', "It's winding down", 'Green was never happening'], w: [46, 37, 17] },
+  { q: 'Have you paid the bridge troll this year?', o: ['Paid in full', "I'm on a payment plan", 'I take the tunnel', 'I am the troll'], w: [21, 33, 29, 17] },
+  { q: 'Is a staircase a kind of river?', o: ['Yes', 'No', 'Only going down'], w: [18, 29, 53] },
+  { q: 'Who is winning between the sun and the wind?', o: ['The sun', 'The wind', 'They made up', 'The traveler'], w: [36, 19, 22, 23] },
+  { q: 'Do you still have the egg you were given?', o: ["Yes, it's safe", 'It hatched', 'I traded it', 'I was never given an egg'], w: [31, 24, 16, 29] },
+  { q: 'How many kings can you name without stopping?', o: ['One to three', 'Four to ten', 'All of them', 'I do not acknowledge kings'], w: [33, 27, 11, 29] },
+  { q: 'Did Humpty Dumpty have it coming?', o: ['Yes', 'No', 'The wall was at fault', "It was the king's men"], w: [23, 21, 27, 29] },
+  { q: 'What is the correct amount of bees?', o: ['Fewer', 'More', 'This many is fine', 'One large bee'], w: [11, 37, 24, 28] },
+  { q: 'Is the back of your head still there?', o: ['Yes, just checked', "I can't confirm", 'It comes and goes'], w: [44, 35, 21] },
+  { q: "Does your house know you're gone during the day?", o: ['Yes', 'No', 'It prefers it'], w: [31, 22, 47] },
+  { q: 'Have you forgiven the letter Q?', o: ['Yes', 'Never', 'What did Q do', 'Q should forgive me'], w: [19, 26, 38, 17] },
+  { q: 'Which of the four winds do you know personally?', o: ['North', 'South', 'East', 'West'], w: [34, 17, 21, 28] },
+  { q: 'When did you last hear from the moon?', o: ['Last night', 'Not since childhood', 'We are not speaking', 'It writes, I do not reply'], w: [29, 31, 19, 21] },
+  { q: 'Is the cat who lives in the clock doing well?', o: ['Yes, thriving', 'It moved out', 'That is a mouse', 'I will check on the hour'], w: [27, 16, 31, 26] },
+];
+
+const PERSONAS = [
+  ['Maya Okafor', 'mayaokay'], ['Jonah Reyes', 'jonah.exe'], ['Priya Nair', 'priya_n'],
+  ['Theo Lindqvist', 'theolq'], ['Sam Abara', 'samwise_a'], ['Lucía Ferrer', 'luciaf'],
+  ['Dev Kapoor', 'devk'], ['Hana Sato', 'hanasato'], ['Marcus Bellamy', 'marcusb'],
+  ['Imani Cole', 'imani.c'], ['Oskar Nowak', 'oskarn'], ['Bea Whitlock', 'beawhit'],
+  ['Rafi Haddad', 'rafih'], ['Nell Okoye', 'nellie_o'], ['Caleb Stroud', 'calebst'],
+  ['Yuki Tan', 'yukitan'], ['Tess Moreau', 'tessm'], ['Dre Salvador', 'dre_sal'],
+  ['Wren Castillo', 'wrenc'], ['Gus Petrov', 'gus_p'], ['Leila Farah', 'leilaf'],
+  ['Noor Aziz', 'noor.az'], ['Finn Gallagher', 'finngal'], ['Zadie Brooks', 'zadieb'],
+  ['Kofi Mensah', 'kofim'], ['Ines Duarte', 'inesd'], ['Milo Park', 'milopark'],
+  ['Ruth Adeyemi', 'ruth_ade'],
+].map(([name, handle]) => ({ name, handle }));
+
+/* ================= helpers ================= */
+const $ = (s) => document.querySelector(s);
+const el = (tag, cls, text) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+};
+const rand = (a, b) => a + Math.random() * (b - a);
+const randInt = (a, b) => Math.floor(rand(a, b + 1));
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const sum = (arr) => arr.reduce((a, b) => a + b, 0);
+const normalize = (arr) => { const t = sum(arr); return arr.map((x) => x / t); };
+const shuffle = (arr) => {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+};
+const fmt = (n) => n >= 10000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : n.toLocaleString('en-US');
+const hueOf = (s) => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+const initials = (name) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+const gauss = () => { let u = 0; for (let i = 0; i < 6; i++) u += Math.random(); return (u - 3) * Math.SQRT2; };
+const poisson = (l) => {
+  if (l <= 0) return 0;
+  if (l > 30) return Math.max(0, Math.round(l + Math.sqrt(l) * gauss()));
+  const L = Math.exp(-l);
+  let k = 0, p = 1;
+  do { k++; p *= Math.random(); } while (p > L);
+  return k - 1;
+};
+// whole-number percentages that always add up to 100
+const percents = (v) => {
+  const t = sum(v);
+  if (!t) return v.map(() => 0);
+  const raw = v.map((x) => x * 100 / t);
+  const out = raw.map(Math.floor);
+  const order = raw.map((x, i) => [x - out[i], i]).sort((a, b) => b[0] - a[0]);
+  for (let k = 0, rem = 100 - sum(out); k < rem; k++) out[order[k][1]]++;
+  return out;
+};
+const ago = (t) => {
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 5) return 'now';
+  if (s < 60) return Math.floor(s) + 's';
+  if (s < 3600) return Math.floor(s / 60) + 'm';
+  if (s < 86400) return Math.floor(s / 3600) + 'h';
+  return Math.floor(s / 86400) + 'd';
+};
+const timeLeft = (t) => {
+  const m = (t - Date.now()) / 60000;
+  if (m >= 2880) return Math.round(m / 1440) + 'd left';
+  if (m >= 59.5) return Math.round(m / 60) + 'h left';
+  return Math.max(1, Math.round(m)) + 'm left';
+};
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('pollmii:' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('pollmii:' + k, JSON.stringify(v)); } catch { /* private mode etc. */ } },
+};
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ================= state ================= */
+const feed = $('#feed');
+const pill = $('#pill');
+let polls = [];                    // newest first, mirrors DOM order
+let unseen = 0;
+let votesCast = store.get('votesCast', 0);
+const me = { name: store.get('name', 'You'), handle: '', hue: 262, isMe: true };
+const handleOf = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'you';
+me.handle = handleOf(me.name);
+
+let idSeq = 0;
+const uid = () => 'p' + Date.now().toString(36) + (idSeq++).toString(36);
+
+// Mix the two kinds of question so neither runs more than two in a row.
+const seedOrder = (() => {
+  const a = shuffle(EVERYDAY.slice()), b = shuffle(ODD.slice()), out = [];
+  let last = null, run = 0;
+  while (a.length || b.length) {
+    let from = Math.random() < .5 ? a : b;
+    if (from === last && run >= 2) from = from === a ? b : a;
+    if (!from.length) from = from === a ? b : a;
+    run = from === last ? run + 1 : 1;
+    last = from;
+    out.push(from.pop());
+  }
+  return out;
+})();
+let seedCursor = 0;
+const nextSeed = () => seedOrder[seedCursor++ % seedOrder.length];
+let personaQueue = [];
+const nextPersona = () => {
+  if (!personaQueue.length) personaQueue = shuffle(PERSONAS.slice());
+  return personaQueue.pop();
+};
+
+/* ================= vote simulation ================= */
+// Votes arrive fast when a poll is fresh and settle to a steady trickle.
+const effRate = (p, age) => p.rate * (p.floor + (1 - p.floor) * Math.exp(-age / p.tau));
+const expectedVotes = (p, a0, a1) =>
+  p.rate * (p.floor * (a1 - a0) + (1 - p.floor) * p.tau * (Math.exp(-a0 / p.tau) - Math.exp(-a1 / p.tau)));
+
+function addVotes(p, n) {
+  if (n <= 0) return;
+  const last = p.weights.length - 1;
+  if (n > 60) {
+    let left = n;
+    p.weights.forEach((w, i) => {
+      const k = i === last ? left : Math.min(left, Math.round(n * w * rand(.93, 1.07)));
+      p.votes[i] += k; left -= k;
+    });
+    return;
+  }
+  for (let k = 0; k < n; k++) {
+    let r = Math.random(), i = 0;
+    while (i < last && (r -= p.weights[i]) > 0) i++;
+    p.votes[i]++;
+  }
+}
+
+function makeSynthetic(seed, ageSec) {
+  const hot = Math.random() < 0.16;
+  const now = Date.now();
+  const p = {
+    id: uid(), q: seed.q, opts: seed.o.slice(), votes: seed.o.map(() => 0),
+    weights: normalize(seed.w.map((w) => w * rand(.8, 1.25))),
+    rate: hot ? rand(6, 16) : Math.exp(rand(Math.log(.3), Math.log(3.5))),
+    floor: .3, tau: 120, hot,
+    author: nextPersona(),
+    createdAt: now - ageSec * 1000,
+    endsAt: now - ageSec * 1000 + pick([1, 3, 6, 12, 24, 24, 48, 72]) * 3600e3,
+    mine: false, myVote: null, likes: 0, liked: false, lastTick: now,
+  };
+  const total = Math.round(expectedVotes(p, 0, ageSec) * rand(.7, 1.2)) + (ageSec > 5 ? randInt(3, 40) : randInt(0, 3));
+  addVotes(p, total);
+  p.likes = Math.round(total * rand(.02, .07));
+  return p;
+}
+
+const MILESTONES = [1, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
+function checkMilestones(p, quiet) {
+  const total = sum(p.votes);
+  let hit = 0;
+  while (p.ms < MILESTONES.length && total >= MILESTONES[p.ms]) hit = MILESTONES[p.ms++];
+  if (!hit || quiet) return;
+  toast(hit === 1 ? `${pick(PERSONAS).name} cast the first vote on your poll` : `Your poll just passed ${fmt(hit)} votes`);
+}
+
+function tick() {
+  const now = Date.now();
+  for (const p of polls) {
+    // each poll updates on its own irregular beat so the feed doesn't pulse in unison
+    p.dom.time.textContent = ago(p.createdAt);
+    if (now < p.lastTick || Math.random() > .4) continue;
+    const dt = Math.min(4, (now - p.lastTick) / 1000);
+    p.lastTick = now;
+    let bump = false;
+    if (now < p.endsAt) {
+      const n = poisson(effRate(p, (now - p.createdAt) / 1000) * dt);
+      if (n) {
+        addVotes(p, n);
+        bump = true;
+        if (Math.random() < .5) p.likes += poisson(n * .06);
+        if (p.mine) { mineDirty = true; checkMilestones(p); }
+      }
+      if (Math.random() < .06) { // let sentiment wander a little
+        const i = randInt(0, p.weights.length - 1);
+        p.weights[i] *= rand(.9, 1.12);
+        p.weights = normalize(p.weights);
+      }
+    }
+    paint(p, bump);
+  }
+  paintStats();
+}
+
+/* ================= rendering ================= */
+const HEART = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z" stroke-linejoin="round"/></svg>';
+
+function paintAuthor(p) {
+  const a = p.author, d = p.dom;
+  d.avatar.textContent = initials(a.name);
+  d.avatar.style.setProperty('--h', a.isMe ? a.hue : hueOf(a.handle));
+  d.name.textContent = a.name;
+  d.handle.textContent = '@' + a.handle;
+}
+
+function build(p) {
+  const slot = el('div', 'slot' + (p.mine ? ' mine' : ''));
+  const card = el('article', 'card poll');
+
+  const head = el('header', 'phead');
+  const avatar = el('span', 'avatar');
+  const who = el('div', 'who');
+  const name = el('span', 'name');
+  const meta = el('span', 'meta');
+  const handle = el('span');
+  const time = el('span');
+  meta.append(handle, ' · ', time);
+  who.append(name, meta);
+  head.append(avatar, who);
+  if (p.mine) head.append(el('span', 'badge you', 'Your poll'));
+  else if (p.hot) head.append(el('span', 'badge', 'Trending'));
+
+  const list = el('div', 'opts');
+  const opts = p.opts.map((text, i) => {
+    const btn = el('button', 'opt');
+    btn.type = 'button';
+    const pct = el('span', 'pct');
+    btn.append(el('span', 'bar'), el('span', 'txt', text), pct);
+    btn.addEventListener('click', () => vote(p, i));
+    list.append(btn);
+    return { btn, pct };
+  });
+
+  const foot = el('footer', 'pfoot');
+  const votes = el('span', 'votes');
+  const left = el('span');
+  foot.append(votes, ' · ', left, el('span', 'sp'));
+  if (p.mine) {
+    const del = el('button', 'link', 'Delete');
+    del.type = 'button';
+    del.addEventListener('click', () => removeMine(p));
+    foot.append(del);
+  }
+  const likeBtn = el('button', 'like');
+  likeBtn.type = 'button';
+  likeBtn.setAttribute('aria-label', 'Like');
+  likeBtn.innerHTML = HEART;
+  const likeCount = el('span');
+  likeBtn.append(likeCount);
+  likeBtn.addEventListener('click', () => {
+    p.liked = !p.liked;
+    p.likes += p.liked ? 1 : -1;
+    if (p.mine) mineDirty = true;
+    paint(p);
+  });
+  foot.append(likeBtn);
+
+  card.append(head, el('h3', 'q', p.q), list, foot);
+  slot.append(card);
+  p.dom = { slot, card, avatar, name, handle, time, opts, votes, left, likeBtn, likeCount };
+  paintAuthor(p);
+}
+
+function paint(p, bump) {
+  const d = p.dom;
+  const total = sum(p.votes);
+  const pc = percents(p.votes);
+  const max = Math.max(...p.votes);
+  const ended = Date.now() >= p.endsAt;
+  // like most social polls: results stay hidden until you vote (authors always see their own)
+  const revealed = RESULTS_BEFORE_VOTING || p.mine || p.myVote !== null || ended;
+  d.card.classList.toggle('revealed', revealed);
+  d.opts.forEach((o, i) => {
+    o.btn.style.setProperty('--p', pc[i] + '%');
+    o.pct.textContent = revealed ? pc[i] + '%' : '';
+    o.btn.classList.toggle('lead', revealed && total > 0 && p.votes[i] === max);
+    o.btn.classList.toggle('chosen', p.myVote === i);
+    o.btn.disabled = p.myVote !== null || ended;
+  });
+  d.votes.textContent = fmt(total) + (total === 1 ? ' vote' : ' votes');
+  if (bump) d.votes.classList.toggle('b'); // swapping the animation name restarts the flash
+  d.time.textContent = ago(p.createdAt);
+  d.left.textContent = ended ? 'Final results' : timeLeft(p.endsAt);
+  d.likeBtn.classList.toggle('on', p.liked);
+  d.likeBtn.setAttribute('aria-pressed', String(p.liked));
+  d.likeCount.textContent = p.likes > 0 ? fmt(p.likes) : '';
+}
+
+function vote(p, i) {
+  if (p.myVote !== null || Date.now() >= p.endsAt) return;
+  p.myVote = i;
+  p.votes[i]++;
+  votesCast++;
+  store.set('votesCast', votesCast);
+  if (p.mine) mineDirty = true;
+  paint(p, true);
+  paintStats();
+}
+
+/* ================= feed ================= */
+const atTop = () => window.scrollY < 80;
+const onlyMine = () => feed.classList.contains('only-mine');
+
+function slideIn(slot) {
+  if (reduceMotion) return;
+  const h = slot.offsetHeight;
+  if (!h) return;
+  slot.style.cssText = 'height:0;opacity:0;overflow:hidden';
+  void slot.offsetHeight;
+  slot.style.cssText = `height:${h}px;opacity:1;overflow:hidden;transition:height .38s cubic-bezier(.2,.8,.2,1),opacity .38s`;
+  setTimeout(() => { slot.style.cssText = ''; }, 420);
+}
+
+function insertPoll(p, own) {
+  build(p);
+  paint(p);
+  polls.unshift(p);
+  feed.prepend(p.dom.slot);
+  if (own || atTop()) { slideIn(p.dom.slot); return; }
+  // The visitor is reading further down: keep their place and tell them there's more above.
+  const h = p.dom.slot.offsetHeight;
+  if (!h) return;
+  window.scrollBy({ top: h, behavior: 'instant' });
+  unseen++;
+  pill.textContent = `↑ ${unseen} new poll${unseen === 1 ? '' : 's'}`;
+  pill.hidden = false;
+}
+
+function trim() {
+  let extra = polls.filter((p) => !p.mine).length - MAX_FEED;
+  for (let i = polls.length - 1; i >= 0 && extra > 0; i--) {
+    const p = polls[i];
+    if (p.mine) continue;
+    const r = p.dom.slot.getBoundingClientRect();
+    if (r.height && r.top < window.innerHeight) break; // never yank a poll someone is looking at
+    p.dom.slot.remove();
+    polls.splice(i, 1);
+    extra--;
+  }
+}
+
+let holds = 0;
+function spawn() {
+  if (document.hidden) return;
+  // don't shove the feed down while the mouse is poised over an answer
+  if (atTop() && holds < 4 && matchMedia('(hover: hover)').matches && feed.querySelector('.opt:hover')) {
+    holds++;
+    setTimeout(spawn, 900);
+    return;
+  }
+  holds = 0;
+  insertPoll(makeSynthetic(nextSeed(), 0));
+  trim();
+}
+function spawnLoop() {
+  setTimeout(() => { spawn(); spawnLoop(); }, rand(SPAWN_MS[0], SPAWN_MS[1]));
+}
+
+function jumpTo(p) {
+  if (onlyMine() && !p.mine) setTab(false);
+  p.dom.slot.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+  p.dom.card.classList.add('flash');
+  setTimeout(() => p.dom.card.classList.remove('flash'), 1400);
+}
+
+window.addEventListener('scroll', () => {
+  if (atTop() && unseen) { unseen = 0; pill.hidden = true; }
+}, { passive: true });
+const toTop = () => window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+pill.addEventListener('click', toTop);
+$('#brand').addEventListener('click', (e) => { e.preventDefault(); toTop(); });
+
+/* ================= tabs ================= */
+const tabLive = $('#tabLive'), tabMine = $('#tabMine'), emptyMine = $('#emptyMine');
+function setTab(mine) {
+  feed.classList.toggle('only-mine', mine);
+  tabLive.setAttribute('aria-selected', String(!mine));
+  tabMine.setAttribute('aria-selected', String(mine));
+  emptyMine.hidden = !(mine && !polls.some((p) => p.mine));
+  if (mine) { unseen = 0; pill.hidden = true; }
+}
+tabLive.addEventListener('click', () => setTab(false));
+tabMine.addEventListener('click', () => setTab(true));
+
+/* ================= the visitor's own polls ================= */
+let mineDirty = false;
+function saveMine() {
+  mineDirty = false;
+  const now = Date.now();
+  store.set('polls', polls.filter((p) => p.mine).map((p) => ({
+    id: p.id, q: p.q, opts: p.opts, votes: p.votes, weights: p.weights,
+    rate: p.rate, floor: p.floor, tau: p.tau, createdAt: p.createdAt, endsAt: p.endsAt,
+    myVote: p.myVote, likes: p.likes, liked: p.liked, ms: p.ms, savedAt: now,
+  })));
+}
+setInterval(() => { if (mineDirty) saveMine(); }, 3000);
+window.addEventListener('pagehide', saveMine);
+
+function loadMine() {
+  const now = Date.now();
+  let gained = 0;
+  const out = [];
+  for (const s of store.get('polls', [])) {
+    if (!s || typeof s.q !== 'string' || !Array.isArray(s.opts) || !Array.isArray(s.votes)) continue;
+    const p = { ...s, author: me, mine: true, hot: false, lastTick: now };
+    // votes kept coming in while the tab was closed
+    const a0 = (s.savedAt - s.createdAt) / 1000;
+    const a1 = (Math.min(now, s.endsAt) - s.createdAt) / 1000;
+    if (a1 > a0) {
+      const n = Math.round(expectedVotes(p, a0, a1) * rand(.9, 1.1));
+      addVotes(p, n);
+      p.likes += Math.round(n * .04);
+      gained += n;
+    }
+    checkMilestones(p, true);
+    out.push(p);
+  }
+  if (gained > 0) setTimeout(() => toast(`Your polls picked up ${fmt(gained)} vote${gained === 1 ? '' : 's'} while you were away`), 900);
+  return out;
+}
+
+function removeMine(p) {
+  if (!confirm('Delete this poll?')) return;
+  p.dom.slot.remove();
+  polls = polls.filter((x) => x !== p);
+  saveMine();
+  paintStats();
+  setTab(onlyMine());
+}
+
+/* ================= composer ================= */
+const form = $('#composer'), qEl = $('#q'), orows = $('#orows');
+const addBtn = $('#addOpt'), postBtn = $('#postBtn'), countEl = $('#count');
+const nameEl = $('#meName'), meAvatar = $('#meAvatar');
+
+const optInputs = () => [...orows.querySelectorAll('input')];
+function cleanOptions() {
+  const seen = new Set();
+  return optInputs().map((i) => i.value.trim().replace(/\s+/g, ' ')).filter((v) => {
+    const k = v.toLowerCase();
+    if (!v || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+function validate() {
+  postBtn.disabled = !(qEl.value.trim() && cleanOptions().length >= 2);
+  const left = 140 - qEl.value.length;
+  countEl.textContent = left;
+  countEl.classList.toggle('warn', left <= 20);
+}
+function relabel() {
+  optInputs().forEach((inp, i) => {
+    inp.placeholder = `Option ${i + 1}` + (i > 1 ? ' (optional)' : '');
+    inp.setAttribute('aria-label', `Option ${i + 1}`);
+  });
+  addBtn.hidden = optInputs().length >= MAX_OPTIONS;
+}
+function addOptionRow(focus) {
+  const row = el('div', 'orow');
+  const inp = el('input');
+  inp.maxLength = 40;
+  inp.addEventListener('input', validate);
+  row.append(inp);
+  if (orows.children.length >= 2) {
+    const rm = el('button', '', '×');
+    rm.type = 'button';
+    rm.setAttribute('aria-label', 'Remove option');
+    rm.addEventListener('click', () => { row.remove(); relabel(); validate(); });
+    row.append(rm);
+  }
+  orows.append(row);
+  relabel();
+  if (focus) inp.focus();
+}
+function resetComposer() {
+  qEl.value = '';
+  qEl.style.height = '';
+  orows.textContent = '';
+  addOptionRow(); addOptionRow();
+  validate();
+}
+
+addBtn.addEventListener('click', () => addOptionRow(true));
+qEl.addEventListener('input', () => {
+  qEl.style.height = 'auto';
+  qEl.style.height = qEl.scrollHeight + 'px';
+  validate();
+});
+qEl.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  if ((e.metaKey || e.ctrlKey) && !postBtn.disabled) form.requestSubmit();
+  else optInputs()[0].focus();
+});
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const q = qEl.value.trim().replace(/\s+/g, ' ');
+  const opts = cleanOptions();
+  if (!q || opts.length < 2) return;
+  const now = Date.now();
+  const p = {
+    id: uid(), q, opts, votes: opts.map(() => 0),
+    weights: normalize(opts.map(() => Math.pow(Math.random(), 1.5) + .12)),
+    rate: rand(.9, 2.4), floor: .04, tau: 240, hot: false,
+    author: me, createdAt: now, endsAt: now + POLL_HOURS * 3600e3,
+    mine: true, myVote: null, likes: 0, liked: false, ms: 0,
+    lastTick: now + rand(1200, 2600), // a beat before the first vote lands
+  };
+  insertPoll(p, true);
+  resetComposer();
+  saveMine();
+  paintStats();
+  setTab(onlyMine());
+  setTimeout(() => jumpTo(p), 60);
+});
+
+function paintMe() {
+  meAvatar.textContent = initials(me.name);
+  meAvatar.style.setProperty('--h', me.hue);
+}
+nameEl.value = me.name;
+nameEl.addEventListener('input', () => {
+  me.name = nameEl.value.trim() || 'You';
+  me.handle = handleOf(me.name);
+  store.set('name', me.name);
+  paintMe();
+  polls.forEach((p) => { if (p.mine) paintAuthor(p); });
+});
+nameEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); qEl.focus(); } });
+
+/* ================= sidebar, header, toasts ================= */
+const hotEl = $('#hot');
+let hotKey = '', hotRows = [];
+function paintHot() {
+  const now = Date.now();
+  const top = polls.filter((p) => now < p.endsAt)
+    .map((p) => [effRate(p, (now - p.createdAt) / 1000), p])
+    .sort((a, b) => b[0] - a[0]).slice(0, 4).map((x) => x[1]);
+  const key = top.map((p) => p.id).join();
+  if (key !== hotKey) {
+    hotKey = key;
+    hotEl.textContent = '';
+    hotRows = top.map((p) => {
+      const li = el('li'), b = el('button'), hv = el('span', 'hv');
+      b.type = 'button';
+      b.append(el('span', 'hq', p.q), hv);
+      b.addEventListener('click', () => jumpTo(p));
+      li.append(b);
+      hotEl.append(li);
+      return { p, hv };
+    });
+  }
+  hotRows.forEach(({ p, hv }) => { hv.textContent = `${fmt(sum(p.votes))} votes · @${p.author.handle}`; });
+}
+
+function paintStats() {
+  const mine = polls.filter((p) => p.mine);
+  $('#sVotes').textContent = fmt(votesCast);
+  $('#sPosted').textContent = fmt(mine.length);
+  $('#sReceived').textContent = fmt(sum(mine.map((p) => sum(p.votes) - (p.myVote !== null ? 1 : 0))));
+}
+
+let online = randInt(2100, 2700);
+function paintOnline() {
+  online = Math.max(1400, Math.min(3900, online + randInt(-14, 15)));
+  $('#online').textContent = fmt(online);
+}
+
+const toasts = $('#toasts');
+function toast(msg) {
+  const t = el('div', 'toast', msg);
+  toasts.append(t);
+  while (toasts.children.length > 3) toasts.firstChild.remove();
+  setTimeout(() => t.classList.add('out'), 4200);
+  setTimeout(() => t.remove(), 4600);
+}
+
+/* ================= boot ================= */
+paintMe();
+resetComposer();
+
+const initial = [14, 55, 130, 260, 430, 700, 1100, 1500].map((age) => makeSynthetic(nextSeed(), age * rand(.8, 1.2)));
+[...initial, ...loadMine()].sort((a, b) => b.createdAt - a.createdAt).forEach((p) => {
+  build(p);
+  paint(p);
+  polls.push(p);
+  feed.append(p.dom.slot);
+});
+
+paintStats();
+paintHot();
+paintOnline();
+setInterval(tick, TICK_MS);
+setInterval(paintHot, 2500);
+setInterval(paintOnline, 2200);
+spawnLoop();
+})();
+</script>
+</body>
+</html>
